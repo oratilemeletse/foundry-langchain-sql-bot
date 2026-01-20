@@ -1,7 +1,7 @@
 // key vault module
 
 @description('Env name')
-param environment string
+param environmentType string
 
 @description('Azure region')
 param location string = resourceGroup().location
@@ -10,7 +10,7 @@ param location string = resourceGroup().location
 param adminObjectId string
 
 
-var keyVaultName = 'adv-kv-${environment}-${uniqueString(resourceGroup().id)}'
+var keyVaultName = 'adv-kv-${environmentType}-${uniqueString(resourceGroup().id)}'
 
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {

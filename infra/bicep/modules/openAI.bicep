@@ -4,7 +4,7 @@
 //parameters
 
 @description('Env name')
-param environment string
+param environmentType string
 
 @description('Key Vault name to store secrets')
 param keyVaultName string
@@ -27,7 +27,7 @@ param modelName string = 'gpt-4'
 
 //variables
 
-var openaiAccountName = 'adventureworks-openai-${environment}'
+var openaiAccountName = 'adventureworks-openai-${environmentType}'
 var deploymentName = 'gpt-4-deployment'
 
 // Model version mappings
@@ -100,4 +100,6 @@ output accountName string = openaiAccount.name
 @description('GPT-4 deployment name (use this in your code)')
 output deploymentName string = gpt4Deployment.name
 
+@description('Azure OpenAI API key (also stored in Key Vault)')
+output apiKey string = openaiAccount.listKeys().key1
 
