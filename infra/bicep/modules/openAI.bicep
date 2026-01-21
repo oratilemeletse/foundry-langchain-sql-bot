@@ -100,6 +100,4 @@ output accountName string = openaiAccount.name
 @description('GPT-4 deployment name (use this in your code)')
 output deploymentName string = gpt4Deployment.name
 
-@description('Azure OpenAI API key (also stored in Key Vault)')
-output apiKey string = openaiAccount.listKeys().key1
 

@@ -82,5 +82,3 @@ output id string = containerRegistry.id
 @description('Admin username (same as registry name)')
 output adminUsername string = containerRegistry.name
 
-@description('Admin password (also stored in Key Vault)')
-output adminPassword string = containerRegistry.listCredentials().passwords[0].value
