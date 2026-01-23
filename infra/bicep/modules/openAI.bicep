@@ -27,7 +27,7 @@ param modelName string = 'gpt-4'
 
 //variables
 
-var openaiAccountName = 'adventureworks-openai-${environmentType}'
+var openaiAccountName = 'adv-openai-${environmentType}-${uniqueString(resourceGroup().id)}'
 var deploymentName = 'gpt-4-deployment'
 
 // Model version mappings
@@ -87,6 +87,25 @@ resource keyVaultSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
     value: openaiAccount.listKeys().key1
   }
 }
+
+// Store OpenAI endpoint in Key Vault (for container to read at runtime)
+resource openaiEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  name: 'openai-endpoint'
+  parent: keyVault
+  properties: {
+    value: openaiAccount.properties.endpoint
+  }
+}
+
+// Store OpenAI deployment name in Key Vault (for container to read at runtime)
+resource openaiDeploymentSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  name: 'openai-deployment-name'
+  parent: keyVault
+  properties: {
+    value: gpt4Deployment.name
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Outputs
 // ----------------------------------------------------------------------------

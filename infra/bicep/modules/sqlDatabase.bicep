@@ -45,8 +45,9 @@ param keyVaultName string
 // azure  sql db vars
 
 
-var sqlServerName = 'adventureworks-sql-server-${environmentType}'
-var sqlDBName = 'adventureworks-sql-db-${environmentType}'
+var sqlServerName = 'adv-sql-${environmentType}-${uniqueString(resourceGroup().id)}'
+
+var sqlDBName = 'adv-sql-db-${environmentType}-${uniqueString(resourceGroup().id)}'
 
 var skuConfig = {
   Basic: {
@@ -57,7 +58,7 @@ var skuConfig = {
   Standard: {
     name : 'Standard'
     tier : 'Standard'
-    capicity : 10
+    capacity : 10
   }
 
   Premium : {
@@ -149,6 +150,24 @@ resource sqlUsernameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'sql-admin-username'
   properties: {
     value: sqlAdminUsername
+  }
+}
+
+// Store SQL Server FQDN in Key Vault (for container to read at runtime)
+resource sqlServerFqdnSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'sql-server-fqdn'
+  properties: {
+    value: sqlServer.properties.fullyQualifiedDomainName
+  }
+}
+
+// Store SQL Database name in Key Vault (for container to read at runtime)
+resource sqlDatabaseNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'sql-database-name'
+  properties: {
+    value: sqlDatabase.name
   }
 }
 

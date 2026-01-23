@@ -29,11 +29,15 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
+// Grant admin user "Key Vault Secrets Officer" role
+// This role can: read, write, delete, backup, restore secrets
+// Role ID: b86a8fe4-44ce-4948-aee5-eccb2c155cd7 (Azure built-in)
 resource adminSecretAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(keyVault.id, adminObjectId, 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
   scope: keyVault
   properties: {
-    principalId: adminObjectId  // ← Passed in
+    principalId: adminObjectId
+    // Key Vault Secrets Officer - full control over secrets
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
     principalType: 'User'
   }

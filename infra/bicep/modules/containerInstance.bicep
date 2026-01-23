@@ -98,7 +98,7 @@ param keyVaultUri string
 
 var containerGroupName = 'adventureworks-chatbot-${environmentType}'
 var containerName = 'chatbot-api'
-var dnsLabel = 'adventureworks-chatbot-${environmentType}'
+var dnsLabel = 'adv-chatbot-${environmentType}-${uniqueString(resourceGroup().id)}'
 
 // ============================================================================
 // Container Group Resource
