@@ -1,0 +1,127 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+
+# Requires these GitHub Actions secrets:
+#   AZURE_CREDENTIALS        — output of: az ad sp create-for-rbac --sdk-auth
+#   AZURE_RESOURCE_GROUP     — e.g. rg-adventureworks-dev
+#   AZURE_SUBSCRIPTION_ID    — your subscription ID
+#   SQL_ADMIN_USERNAME       — SQL admin username
+#   SQL_ADMIN_PASSWORD       — SQL admin password
+#   LOCAL_DEV_IP             — your IP for SQL firewall (or 0.0.0.0 to open all)
+#   ADMIN_OBJECT_ID          — your Azure AD Object ID
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Authenticate to Azure
+      # -----------------------------------------------------------------------
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # -----------------------------------------------------------------------
+      # Derive resource names from Bicep conventions
+      # (must match what main.bicep generates)
+      # -----------------------------------------------------------------------
+      - name: Set derived names
+        id: names
+        run: |
+          UNIQUE=$(az group show \
+            --name ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --query id -o tsv | md5sum | cut -c1-13)
+          echo "acr_name=adventureworksacrdev${UNIQUE}" >> $GITHUB_OUTPUT
+          echo "image_tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # Build and push Docker image to ACR
+      # -----------------------------------------------------------------------
+      - name: ACR Login
+        run: |
+          az acr login --name ${{ steps.names.outputs.acr_name }}
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ steps.names.outputs.acr_name }}.azurecr.io/chatbot-api:${{ steps.names.outputs.image_tag }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # -----------------------------------------------------------------------
+      # Deploy infrastructure + container via Bicep
+      # -----------------------------------------------------------------------
+      - name: Deploy via Bicep
+        run: |
+          az deployment group create \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/bicep/main.bicep \
+            --parameters \
+              environmentType=dev \
+              adminObjectId=${{ secrets.ADMIN_OBJECT_ID }} \
+              sqlAdminUsername=${{ secrets.SQL_ADMIN_USERNAME }} \
+              sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} \
+              localDevIpAddress=${{ secrets.LOCAL_DEV_IP }} \
+              containerImage=$IMAGE
+
+      # -----------------------------------------------------------------------
+      # Smoke test: call /health on the deployed container
+      # -----------------------------------------------------------------------
+      - name: Get deployed URL
+        id: url
+        run: |
+          URL=$(az deployment group show \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name main \
+            --query properties.outputs.chatbotUrl.value -o tsv)
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Smoke test /health
+        run: |
+          sleep 30  # wait for container to start
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.url.outputs.url }}/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed with status $STATUS — triggering rollback"
+            exit 1
+          fi
+          echo "Health check passed ✓"
+
+      # -----------------------------------------------------------------------
+      # Auto-rollback: re-deploy previous image on failure
+      # -----------------------------------------------------------------------
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment or smoke test failed. Rolling back to previous image..."
+          PREV_IMAGE="${{ steps.names.outputs.acr_name }}.azurecr.io/chatbot-api:stable"
+          az deployment group create \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/bicep/main.bicep \
+            --parameters \
+              environmentType=dev \
+              adminObjectId=${{ secrets.ADMIN_OBJECT_ID }} \
+              sqlAdminUsername=${{ secrets.SQL_ADMIN_USERNAME }} \
+              sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} \
+              localDevIpAddress=${{ secrets.LOCAL_DEV_IP }} \
+              containerImage=$PREV_IMAGE || echo "Rollback also failed — manual intervention needed"
+
+      # -----------------------------------------------------------------------
+      # Tag the image as stable after a successful deployment
+      # -----------------------------------------------------------------------
+      - name: Tag image as stable
+        if: success()
+        run: |
+          az acr import \
+            --name ${{ steps.names.outputs.acr_name }} \
+            --source "$IMAGE" \
+            --image chatbot-api:stable \
+            --force
